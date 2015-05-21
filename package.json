@@ -4,6 +4,7 @@
   "description": "node-echo",
   "main": "server.js",
   "dependencies": {
+    “pg“:"*"
   },
   "devDependencies": {
     "nodemon": "*"
