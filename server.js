@@ -3,9 +3,9 @@ var util = require('util');
 
 var postgresql_user = process.env.POSTGRESQL_USER || process.env.postgresql_user || "user";
 var postgresql_pass = process.env.POSTGRESQL_PASSWORD || process.env.postgresql_password || "pass";
-var postgresql_ip = process.env.POSTGRESQL_IP || process.env.postgresql_ip || "localhost";
+var postgresql_ip = process.env.DATABASE_SERVICE_HOST || "localhost";
 var postgresql_port = process.env.POSTGRESQL_PORT || process.env.postgresql_port || 5432;
-var postgresql_db = process.env.POSTGRESQL_DATABASE || process.env.postgresql_database || "db";
+var postgresql_db = process.env.POSTGRESQL_DATABASE || process.env.postgresql_database || "root";
 
 if (postgresql_user == null || postgresql_pass == null || postgresql_ip == null || postgresql_db == null){
     console.log("Please check you have set the postgresql user/pass/db in nodejs-example container");

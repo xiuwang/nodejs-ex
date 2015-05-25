@@ -265,7 +265,7 @@
   "kind": "Template",
   "metadata": {
     "annotations": {
-      "description": "This example shows how to create a simple nodejs application in openshift origin v3",
+      "description": "This example shows how to create a simple nodejs application in openshift origin v3"
     },
     "name": "nodejs-helloworld-sample"
   },
