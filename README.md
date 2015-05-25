@@ -1,4 +1,4 @@
-node-example
+Nodejs-example
 =========
 In this example, the nodejs server connect to postgresql-db, insert two message into the db and then listen on 8080 port. When user access the nodejs server, the server getback the info from db and send to user.
 
