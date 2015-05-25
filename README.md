@@ -5,6 +5,7 @@ In this example, the nodejs server connect to postgresql-db, insert two message 
 =========
 
 # Usage this example:
+```javascript
 
 $ osadm new-project test
 
@@ -33,3 +34,4 @@ Hello, Get data from postgreql :
         "version": "9.2"
     }
 ]
+```
