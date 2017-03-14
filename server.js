@@ -1,60 +1,107 @@
-#!/usr/bin/env node
-var util = require('util');
+//  OpenShift sample Node application
+var express = require('express'),
+    fs      = require('fs'),
+    app     = express(),
+    eps     = require('ejs'),
+    morgan  = require('morgan');
+    
+Object.assign=require('object-assign')
 
-var postgresql_user = process.env.POSTGRESQL_USER || process.env.postgresql_user || "user";
-var postgresql_pass = process.env.POSTGRESQL_PASSWORD || process.env.postgresql_password || "pass";
-var postgresql_ip = process.env.DATABASE_SERVICE_HOST || "localhost";
-var postgresql_port = process.env.DATABASE_SERVICE_PORT || process.env.postgresql_port || 5432;
-var postgresql_db = process.env.POSTGRESQL_DATABASE || process.env.postgresql_database || "root";
+app.engine('html', require('ejs').renderFile);
+app.use(morgan('combined'))
 
-if (postgresql_user == null || postgresql_pass == null || postgresql_ip == null || postgresql_db == null){
-    console.log("Please check you have set the postgresql user/pass/db in nodejs-example container");
-    return
+var port = process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080,
+    ip   = process.env.IP   || process.env.OPENSHIFT_NODEJS_IP || '0.0.0.0',
+    mongoURL = process.env.OPENSHIFT_MONGODB_DB_URL || process.env.MONGO_URL,
+    mongoURLLabel = "";
+
+if (mongoURL == null && process.env.DATABASE_SERVICE_NAME) {
+  var mongoServiceName = process.env.DATABASE_SERVICE_NAME.toUpperCase(),
+      mongoHost = process.env[mongoServiceName + '_SERVICE_HOST'],
+      mongoPort = process.env[mongoServiceName + '_SERVICE_PORT'],
+      mongoDatabase = process.env[mongoServiceName + '_DATABASE'],
+      mongoPassword = process.env[mongoServiceName + '_PASSWORD']
+      mongoUser = process.env[mongoServiceName + '_USER'];
+
+  if (mongoHost && mongoPort && mongoDatabase) {
+    mongoURLLabel = mongoURL = 'mongodb://';
+    if (mongoUser && mongoPassword) {
+      mongoURL += mongoUser + ':' + mongoPassword + '@';
+    }
+    // Provide UI label that excludes user id and pw
+    mongoURLLabel += mongoHost + ':' + mongoPort + '/' + mongoDatabase;
+    mongoURL += mongoHost + ':' +  mongoPort + '/' + mongoDatabase;
+
+  }
 }
+var db = null,
+    dbDetails = new Object();
 
-var pg = require("pg");
-//var conString = "pg://user:pass@localhost:5432/db";
-var conString = util.format('pg://%s:%s@%s:%d/%s', postgresql_user,postgresql_pass,postgresql_ip,postgresql_port,postgresql_db);
-console.log("conString is %s",conString);
-var client = new pg.Client(conString);
-client.connect();
+var initDb = function(callback) {
+  if (mongoURL == null) return;
 
-client.query("CREATE TABLE IF NOT EXISTS cartridge(type varchar(64), version varchar(64))");
-//client.query("INSERT INTO cartridge(type, version) values($1, $2)", ['nodejs', '0.10']);
-client.query("INSERT INTO cartridge(type, version) SELECT $1, $2 WHERE NOT EXISTS (SELECT type FROM cartridge WHERE type = $3)",['nodejs', '0.10','nodejs']);
-var query = client.query("INSERT INTO cartridge(type, version) SELECT $1, $2 WHERE NOT EXISTS (SELECT type FROM cartridge WHERE type = $3)",['postgresql', '9.2','postgresql']);
-query.on('end', function() {
-    client.end();
+  var mongodb = require('mongodb');
+  if (mongodb == null) return;
+
+  mongodb.connect(mongoURL, function(err, conn) {
+    if (err) {
+      callback(err);
+      return;
+    }
+
+    db = conn;
+    dbDetails.databaseName = db.databaseName;
+    dbDetails.url = mongoURLLabel;
+    dbDetails.type = 'MongoDB';
+
+    console.log('Connected to MongoDB at: %s', mongoURL);
+  });
+};
+
+app.get('/', function (req, res) {
+  // try to initialize the db on every request if it's not already
+  // initialized.
+  if (!db) {
+    initDb(function(err){});
+  }
+  if (db) {
+    var col = db.collection('counts');
+    // Create a document with request IP and current time of request
+    col.insert({ip: req.ip, date: Date.now()});
+    col.count(function(err, count){
+      res.render('index.html', { pageCountMessage : count, dbInfo: dbDetails });
+    });
+  } else {
+    res.render('index.html', { pageCountMessage : null});
+  }
 });
 
-var http = require('http');
-var url = require('url');
-var port = process.env.PORT || process.env.port || process.env.OPENSHIFT_NODEJS_PORT || 8080;
-var ip = process.env.OPENSHIFT_NODEJS_IP || '0.0.0.0';
-var server = http.createServer(function (req, res) {
-        var url_parts = url.parse(req.url, true);
-        var body = '';
-        req.on('data', function (data) {
-                body += data;
-        });
-        req.on('end', function () {
-                res.writeHead(200, {'Content-Type': 'text/plain'});
-                var myclient = new pg.Client(conString);
-                myclient.connect();
-                var myquery = myclient.query("SELECT type, version FROM cartridge ORDER BY type, version");
-                myquery.on("row", function (row, result) {
-                    result.addRow(row);
-                    //console.log(row)
-                });
-                myquery.on("end", function (result) {
-                    myclient.end();
-                    //console.log("end query");
-                    res.write("Hello, Get data from postgreql : " + "\n");
-                    res.write(JSON.stringify(result.rows, null, "    ") + "\n");
-                    res.end();
-                });
-        });
+app.get('/pagecount', function (req, res) {
+  // try to initialize the db on every request if it's not already
+  // initialized.
+  if (!db) {
+    initDb(function(err){});
+  }
+  if (db) {
+    db.collection('counts').count(function(err, count ){
+      res.send('{ pageCount: ' + count + '}');
+    });
+  } else {
+    res.send('{ pageCount: -1 }');
+  }
 });
-server.listen(port);
-console.log('Server running on ' + ip + ':' + port);
 
+// error handling
+app.use(function(err, req, res, next){
+  console.error(err.stack);
+  res.status(500).send('Something bad happened!');
+});
+
+initDb(function(err){
+  console.log('Error connecting to Mongo. Message:\n'+err);
+});
+
+app.listen(port, ip);
+console.log('Server running on http://%s:%s', ip, port);
+
+module.exports = app ;
